@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.11" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Application\Kart.Wishlist.Application.csproj" />
+    <ProjectReference Include="..\Infrastructure\Kart.Wishlist.Infrastructure.csproj" />
+
+    <!--
+      Kart.Shared.* has real, finished source but no published NuGet feed yet
+      (kart-shared/README.md) - cross-repo ProjectReference until one exists.
+    -->
+    <ProjectReference Include="..\..\..\kart-shared\src\Kart.Shared.ErrorHandling\Kart.Shared.ErrorHandling.csproj" />
+    <ProjectReference Include="..\..\..\kart-shared\src\Kart.Shared.Observability\Kart.Shared.Observability.csproj" />
+    <ProjectReference Include="..\..\..\kart-shared\src\Kart.Shared.Auditing\Kart.Shared.Auditing.csproj" />
+    <ProjectReference Include="..\..\..\kart-shared\src\Kart.Shared.Configuration\Kart.Shared.Configuration.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="..\..\contracts\message-bus-manifest.json" Link="message-bus-manifest.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+</Project>

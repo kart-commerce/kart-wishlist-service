@@ -1,0 +1,112 @@
+name: kart-wishlist-service
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: kart-wishlist-postgres
+    environment:
+      POSTGRES_DB: kart_wishlist
+      POSTGRES_USER: kart_wishlist_service
+      POSTGRES_PASSWORD: changeme
+    ports:
+      - "5452:5432"
+    volumes:
+      - kart-wishlist-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kart_wishlist_service -d kart_wishlist"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: kart-wishlist-redis
+    ports:
+      - "6399:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: kart-wishlist-rabbitmq
+    ports:
+      - "5692:5672"
+      - "15692:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # --- MongoDB sharded cluster (database-design.md: wishlist_read sharded on _id, hashed) ---
+  # Minimal-but-real topology for local dev/verification, mirroring kart-product-service's/
+  # kart-cart-service's own docker-compose.yml precedent: one config-server replset member, two
+  # shard replset members (each a single-node replset — valid for dev, not HA), one mongos router.
+  # scripts/init-mongo-cluster.sh performs rs.initiate/sh.addShard/sh.enableSharding/sh.shardCollection
+  # once all nodes are up.
+  mongo-configsvr:
+    image: mongo:7.0
+    container_name: kart-wishlist-mongo-configsvr
+    command: ["mongod", "--configsvr", "--replSet", "wishlistCfgRS", "--port", "27019", "--bind_ip_all"]
+    volumes:
+      - kart-wishlist-mongo-configsvr-data:/data/db
+
+  mongo-shard1:
+    image: mongo:7.0
+    container_name: kart-wishlist-mongo-shard1
+    command: ["mongod", "--shardsvr", "--replSet", "wishlistShard1RS", "--port", "27018", "--bind_ip_all"]
+    volumes:
+      - kart-wishlist-mongo-shard1-data:/data/db
+
+  mongo-shard2:
+    image: mongo:7.0
+    container_name: kart-wishlist-mongo-shard2
+    command: ["mongod", "--shardsvr", "--replSet", "wishlistShard2RS", "--port", "27018", "--bind_ip_all"]
+    volumes:
+      - kart-wishlist-mongo-shard2-data:/data/db
+
+  mongo-router:
+    image: mongo:7.0
+    container_name: kart-wishlist-mongo-router
+    depends_on:
+      - mongo-configsvr
+      - mongo-shard1
+      - mongo-shard2
+    command: ["mongos", "--configdb", "wishlistCfgRS/kart-wishlist-mongo-configsvr:27019", "--bind_ip_all", "--port", "27017"]
+    ports:
+      - "27317:27017"
+
+  wishlist-service:
+    build:
+      context: ..
+      dockerfile: kart-wishlist-service/Dockerfile
+    container_name: kart-wishlist-service
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      mongo-router:
+        condition: service_started
+    ports:
+      - "8082:8080"
+    environment:
+      ConnectionStrings__WishlistDb: "Host=postgres;Port=5432;Database=kart_wishlist;Username=kart_wishlist_service;Password=changeme"
+      Mongo__ConnectionString: "mongodb://mongo-router:27017"
+      Mongo__DatabaseName: "kart_wishlist"
+      Redis__ConnectionString: "redis:6379"
+      RabbitMq__HostName: "rabbitmq"
+      ProductService__BaseUrl: "http://kart-product-service:8080"
+      Jwt__Issuer: "kart-identity-service"
+      Jwt__JwksUri: "http://kart-identity-service:8080/.well-known/jwks.json"
+
+volumes:
+  kart-wishlist-postgres-data:
+  kart-wishlist-mongo-configsvr-data:
+  kart-wishlist-mongo-shard1-data:
+  kart-wishlist-mongo-shard2-data:

@@ -1,0 +1,62 @@
+{
+  "service": "kart-wishlist-service",
+  "exchanges": [
+    { "name": "wishlist.exchange", "type": "topic", "durable": true },
+    { "name": "wishlist.dlx", "type": "topic", "durable": true }
+  ],
+  "externalExchanges": [
+    { "name": "product.exchange", "type": "topic", "durable": true },
+    { "name": "user.exchange", "type": "topic", "durable": true }
+  ],
+  "publishedEvents": [
+    { "eventType": "WishlistPriceAlertTriggered", "exchange": "wishlist.exchange", "routingKey": "wishlist.price-alert.triggered" }
+  ],
+  "queues": [
+    {
+      "name": "wishlist.product-events.queue",
+      "durable": true,
+      "bindings": [
+        { "exchange": "product.exchange", "routingKey": "product.price.changed" },
+        { "exchange": "product.exchange", "routingKey": "product.product.discontinued" }
+      ],
+      "deadLetter": {
+        "exchange": "wishlist.dlx",
+        "routingKey": "wishlist.product-events.dlq"
+      },
+      "retryLadder": {
+        "requeueTo": "wishlist.product-events.queue",
+        "tiers": [
+          { "name": "wishlist.product-events.retry.30s", "ttlMs": 30000 },
+          { "name": "wishlist.product-events.retry.60s", "ttlMs": 60000 },
+          { "name": "wishlist.product-events.retry.120s", "ttlMs": 120000 }
+        ]
+      }
+    },
+    {
+      "name": "wishlist.user-events.queue",
+      "durable": true,
+      "bindings": [
+        { "exchange": "user.exchange", "routingKey": "user.data-erased" }
+      ],
+      "deadLetter": {
+        "exchange": "wishlist.dlx",
+        "routingKey": "wishlist.user-events.dlq"
+      },
+      "retryLadder": {
+        "requeueTo": "wishlist.user-events.queue",
+        "tiers": [
+          { "name": "wishlist.user-events.retry.30s", "ttlMs": 30000 },
+          { "name": "wishlist.user-events.retry.60s", "ttlMs": 60000 },
+          { "name": "wishlist.user-events.retry.120s", "ttlMs": 120000 },
+          { "name": "wishlist.user-events.retry.240s", "ttlMs": 240000 },
+          { "name": "wishlist.user-events.retry.480s", "ttlMs": 480000 }
+        ]
+      }
+    }
+  ],
+  "deadLetterQueues": [
+    { "name": "wishlist.product-events.dlq", "exchange": "wishlist.dlx", "routingKey": "wishlist.product-events.dlq" },
+    { "name": "wishlist.user-events.dlq", "exchange": "wishlist.dlx", "routingKey": "wishlist.user-events.dlq" }
+  ],
+  "_comment": "Reconciled to the mature nested manifest shape kart-identity-service/kart-cart-service/kart-product-service/kart-user-service already use (exchanges[]/externalExchanges[]/publishedEvents[]/queues[with deadLetter+retryLadder]/deadLetterQueues[]), superseding kart-platform/docs/services/kart-wishlist-service/message-bus-manifest.json's earlier flatter draft shape (exchange/dlx/queues/dlqs/retry as siblings) - the same reconciliation kart-cart-service's own manifest documents for itself. Queue/DLQ names and retry counts match event-contract.md exactly (ProductPriceChanged/ProductDiscontinued: 3x retry, wishlist.product-events.dlq; UserDataErased: 5x exponential-backoff retry, wishlist.user-events.dlq, compliance-critical tier per ADR-0016 item 7). WishlistPriceAlertTriggered's own consumers (Notification, Analytics) declare their own queues/DLQs bound to wishlist.exchange in their own manifests - not shown here, since a manifest only ever declares the exchanges/queues this service itself owns and directly interacts with."
+}

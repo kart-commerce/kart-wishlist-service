@@ -1,0 +1,44 @@
+# Build context must be the kart-commerce parent directory (see Dockerfile's own header note).
+#   docker build -f kart-wishlist-service/Dockerfile.migrate -t kart-wishlist-service-migrate:latest .
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+WORKDIR /src
+
+COPY kart-wishlist-service/Directory.Build.props kart-wishlist-service/
+COPY kart-shared/Directory.Build.props kart-shared/
+COPY kart-wishlist-service/.config/dotnet-tools.json kart-wishlist-service/.config/
+COPY kart-wishlist-service/src/Application/Kart.Wishlist.Application.csproj kart-wishlist-service/src/Application/
+COPY kart-wishlist-service/src/Domain/Kart.Wishlist.Domain.csproj kart-wishlist-service/src/Domain/
+COPY kart-wishlist-service/src/Infrastructure/Kart.Wishlist.Infrastructure.csproj kart-wishlist-service/src/Infrastructure/
+COPY kart-shared/src/Kart.Shared.Domain/Kart.Shared.Domain.csproj kart-shared/src/Kart.Shared.Domain/
+COPY kart-shared/src/Kart.Shared.Auditing/Kart.Shared.Auditing.csproj kart-shared/src/Kart.Shared.Auditing/
+COPY kart-shared/src/Kart.Shared.Messaging/Kart.Shared.Messaging.csproj kart-shared/src/Kart.Shared.Messaging/
+
+WORKDIR /src/kart-wishlist-service
+RUN dotnet tool restore
+RUN dotnet restore src/Infrastructure/Kart.Wishlist.Infrastructure.csproj
+
+COPY kart-wishlist-service/src/Application src/Application
+COPY kart-wishlist-service/src/Domain src/Domain
+COPY kart-wishlist-service/src/Infrastructure src/Infrastructure
+COPY kart-shared/src/Kart.Shared.Domain /src/kart-shared/src/Kart.Shared.Domain
+COPY kart-shared/src/Kart.Shared.Auditing /src/kart-shared/src/Kart.Shared.Auditing
+COPY kart-shared/src/Kart.Shared.Messaging /src/kart-shared/src/Kart.Shared.Messaging
+
+# Infrastructure is its own design-time startup project — WishlistDbContextFactory builds the
+# DbContext directly from WISHLIST_DB_CONNECTION_STRING, no Api host needed. Self-contained: the
+# runtime stage needs no .NET runtime, just OS deps (runtime-deps).
+RUN dotnet tool run dotnet-ef migrations bundle \
+    --configuration Release \
+    --self-contained -r linux-x64 \
+    --project src/Infrastructure/Kart.Wishlist.Infrastructure.csproj \
+    --startup-project src/Infrastructure/Kart.Wishlist.Infrastructure.csproj \
+    -o /app/efbundle
+
+FROM mcr.microsoft.com/dotnet/runtime-deps:8.0 AS runtime
+WORKDIR /app
+COPY --from=build /app/efbundle .
+
+# Same env var WishlistDbContextFactory reads at design time (see
+# src/Infrastructure/Persistence/WishlistDbContextFactory.cs) — one convention for "how this
+# service learns its connection string," in dev, CI, and every deployed env.
+ENTRYPOINT ["/bin/sh", "-c", "exec ./efbundle --connection \"$WISHLIST_DB_CONNECTION_STRING\""]
