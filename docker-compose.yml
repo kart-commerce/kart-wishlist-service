@@ -94,7 +94,10 @@ services:
       mongo-router:
         condition: service_started
     ports:
-      - "8082:8080"
+      # ${WISHLIST_PORT} matches kart-devops/ports.env's canonical value for this service --
+      # `source ../kart-devops/ports.env` first to pick it up automatically; the :-8091 fallback
+      # is only for running this repo fully standalone, with no kart-devops checkout alongside it.
+      - "${WISHLIST_PORT:-8091}:8080"
     environment:
       ConnectionStrings__WishlistDb: "Host=postgres;Port=5432;Database=kart_wishlist;Username=kart_wishlist_service;Password=changeme"
       Mongo__ConnectionString: "mongodb://mongo-router:27017"

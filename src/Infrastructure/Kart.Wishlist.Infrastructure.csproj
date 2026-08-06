@@ -6,6 +6,7 @@
 
     <!-- Kart.Shared.* has real, finished source but no published NuGet feed yet -->
     <ProjectReference Include="..\..\..\kart-shared\src\Kart.Shared.Messaging\Kart.Shared.Messaging.csproj" />
+    <ProjectReference Include="..\..\..\kart-shared\src\Kart.Shared.Configuration\Kart.Shared.Configuration.csproj" />
   </ItemGroup>
 
   <ItemGroup>

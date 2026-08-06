@@ -14,7 +14,6 @@ namespace Kart.Wishlist.Infrastructure.BackgroundJobs;
 /// </summary>
 public sealed class DigestFlushHostedService(
     IServiceScopeFactory scopeFactory,
-    IWishlistDigestAccumulator digestAccumulator,
     IDateTimeProvider dateTimeProvider,
     ILogger<DigestFlushHostedService> logger) : BackgroundService
 {
@@ -39,6 +38,9 @@ public sealed class DigestFlushHostedService(
 
     private async Task SweepAsync(CancellationToken cancellationToken)
     {
+        using var accumulatorScope = scopeFactory.CreateScope();
+        var digestAccumulator = accumulatorScope.ServiceProvider.GetRequiredService<IWishlistDigestAccumulator>();
+
         var pendingUserIds = await digestAccumulator.GetPendingUserIdsAsync(cancellationToken);
         if (pendingUserIds.Count == 0)
         {
