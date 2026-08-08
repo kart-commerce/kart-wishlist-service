@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1
+
 # Build context must be the kart-commerce parent directory, not this repo, because
 # Kart.Wishlist.* projects cross-repo-reference kart-shared/src/Kart.Shared.* (no published
 # NuGet feed exists yet — kart-shared/README.md). Build from kart-commerce/ with:
@@ -21,11 +23,26 @@ COPY kart-shared/src/Kart.Shared.Observability/Kart.Shared.Observability.csproj 
 COPY kart-shared/src/Kart.Shared.Auditing/Kart.Shared.Auditing.csproj kart-shared/src/Kart.Shared.Auditing/
 COPY kart-shared/src/Kart.Shared.Configuration/Kart.Shared.Configuration.csproj kart-shared/src/Kart.Shared.Configuration/
 COPY kart-shared/src/Kart.Shared.Messaging/Kart.Shared.Messaging.csproj kart-shared/src/Kart.Shared.Messaging/
-RUN dotnet restore kart-wishlist-service/src/Api/Kart.Wishlist.Api.csproj
+# The cache mount persists extracted NuGet packages under a stable id shared by every other
+# kart-*-service Dockerfile, so restore stays fast (no re-download) even on a cache-miss here
+# (e.g. after a .csproj change) as long as some other service's build already warmed it.
+RUN --mount=type=cache,target=/root/.nuget/packages,id=nuget-packages \
+    dotnet restore kart-wishlist-service/src/Api/Kart.Wishlist.Api.csproj
 
-COPY kart-wishlist-service/ kart-wishlist-service/
-COPY kart-shared/ kart-shared/
-RUN dotnet publish kart-wishlist-service/src/Api/Kart.Wishlist.Api.csproj -c Release -o /app/publish --no-restore
+# Scoped to src/ + contracts/ from each repo instead of the previous whole-directory
+# `COPY kart-wishlist-service/ kart-wishlist-service/` / `COPY kart-shared/ kart-shared/` -- those
+# also pulled in tests/, README.md, kart-shared's own tests/ and docs, etc., so editing any of
+# that busted this layer (and the publish below) even though none of it reaches the published
+# output. contracts/ is kept because Kart.Wishlist.Api.csproj copies message-bus-manifest.json
+# from it into the publish output as a <Content> item.
+COPY kart-wishlist-service/src/ kart-wishlist-service/src/
+COPY kart-wishlist-service/contracts/ kart-wishlist-service/contracts/
+COPY kart-shared/src/ kart-shared/src/
+# --no-restore only skips re-resolving the dependency graph -- publish still reads the actual
+# package DLLs from the global packages folder, so it needs the same cache mount as restore
+# above (the mount isn't part of the image; without it here this folder is empty again).
+RUN --mount=type=cache,target=/root/.nuget/packages,id=nuget-packages \
+    dotnet publish kart-wishlist-service/src/Api/Kart.Wishlist.Api.csproj -c Release -o /app/publish --no-restore
 
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
 WORKDIR /app
