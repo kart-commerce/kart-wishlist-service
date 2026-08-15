@@ -24,10 +24,19 @@ public sealed class LoggingBehaviour<TRequest, TResponse>(ILogger<LoggingBehavio
         var requestName = typeof(TRequest).Name;
         var stopwatch = Stopwatch.StartNew();
 
+        // Checkpoint-logging taxonomy stage 3 ("<Command>HandlerStarted", first line inside
+        // Handle()) generalized here rather than duplicated in every handler — see
+        // checkpoint-logging-standard.md.
+        logger.LogInformation(
+            "Stage {Stage}: {RequestName} handler started",
+            $"{requestName}HandlerStarted",
+            requestName);
+
         var response = await next();
 
         logger.LogInformation(
-            "{RequestName} completed in {ElapsedMilliseconds}ms",
+            "Stage {Stage}: {RequestName} completed in {ElapsedMilliseconds}ms",
+            $"{requestName}Completed",
             requestName,
             stopwatch.ElapsedMilliseconds);
 

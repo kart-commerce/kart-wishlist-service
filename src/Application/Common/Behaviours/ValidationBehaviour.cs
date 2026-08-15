@@ -1,5 +1,6 @@
 using FluentValidation;
 using MediatR;
+using Microsoft.Extensions.Logging;
 
 namespace Kart.Wishlist.Application.Common.Behaviours;
 
@@ -9,7 +10,9 @@ namespace Kart.Wishlist.Application.Common.Behaviours;
 /// once, platform-wide, by <c>Kart.Shared.ErrorHandling</c>'s <c>KartExceptionHandler</c> (400,
 /// grouped by property).
 /// </summary>
-public sealed class ValidationBehaviour<TRequest, TResponse>(IEnumerable<IValidator<TRequest>> validators)
+public sealed class ValidationBehaviour<TRequest, TResponse>(
+    IEnumerable<IValidator<TRequest>> validators,
+    ILogger<ValidationBehaviour<TRequest, TResponse>> logger)
     : IPipelineBehavior<TRequest, TResponse>
     where TRequest : notnull
 {
@@ -30,6 +33,17 @@ public sealed class ValidationBehaviour<TRequest, TResponse>(IEnumerable<IValida
 
         if (failures.Count != 0)
         {
+            var requestName = typeof(TRequest).Name;
+
+            // Checkpoint-logging taxonomy stage 4 ("<Rule>ValidationFailed", logged at Warning
+            // with the reason before throwing) generalized here for every FluentValidation
+            // validator on the platform, rather than duplicated per handler.
+            logger.LogWarning(
+                "Stage {Stage}: {RequestName} rejected — {Errors}",
+                $"{requestName}ValidationFailed",
+                requestName,
+                string.Join("; ", failures.Select(f => $"{f.PropertyName}: {f.ErrorMessage}")));
+
             throw new ValidationException(failures);
         }
 

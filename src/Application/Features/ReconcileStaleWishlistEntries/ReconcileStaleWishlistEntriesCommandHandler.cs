@@ -41,6 +41,7 @@ public sealed class ReconcileStaleWishlistEntriesCommandHandler(
 
         if (skus.Count == 0)
         {
+            logger.LogInformation("Stage {Stage}: reconciliation cycle no-op, no active wishlist skus to check", "ReconciliationNoOpNoActiveSkus");
             return 0;
         }
 
@@ -95,7 +96,8 @@ public sealed class ReconcileStaleWishlistEntriesCommandHandler(
         if (skus.Count >= minSamplesBeforeAbort && (double)errorCount / skus.Count > FailureRateAbortThreshold)
         {
             logger.LogError(
-                "Reconciliation cycle aborted: {ErrorCount}/{TotalCount} Product Service calls failed outright — treating this as a degraded dependency, not real discontinuations.",
+                "Stage {Stage}: reconciliation cycle aborted: {ErrorCount}/{TotalCount} Product Service calls failed outright — treating this as a degraded dependency, not real discontinuations.",
+                "ReconciliationAbortedDegradedDependency",
                 errorCount,
                 skus.Count);
             return 0;
@@ -103,6 +105,7 @@ public sealed class ReconcileStaleWishlistEntriesCommandHandler(
 
         if (staleSkus.Count == 0)
         {
+            logger.LogInformation("Stage {Stage}: reconciliation cycle no-op, no discontinued/missing skus found among {SkuCount} checked", "ReconciliationNoOpNoStaleSkusFound", skus.Count);
             return 0;
         }
 
@@ -119,7 +122,17 @@ public sealed class ReconcileStaleWishlistEntriesCommandHandler(
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        logger.LogInformation("Reconciliation cycle marked {EntryCount} entries stale across {SkuCount} discontinued/missing SKU(s).", affectedEntries.Count, staleSkus.Count);
+        logger.LogInformation(
+            "Stage {Stage}: reconciliation cycle marked {EntryCount} entries stale across {SkuCount} discontinued/missing SKU(s).",
+            "WishlistEntriesMarkedStalePersistedOutboxEnqueued",
+            affectedEntries.Count,
+            staleSkus.Count);
+
+        logger.LogInformation(
+            "Stage {Stage}: reconciliation cycle completed, {EntryCount} entries marked stale",
+            "ReconciliationCycleCompleted",
+            affectedEntries.Count);
+
         return affectedEntries.Count;
     }
 }

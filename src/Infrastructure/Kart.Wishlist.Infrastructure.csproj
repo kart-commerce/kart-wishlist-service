@@ -7,6 +7,7 @@
     <!-- Kart.Shared.* has real, finished source but no published NuGet feed yet -->
     <ProjectReference Include="..\..\..\kart-shared\src\Kart.Shared.Messaging\Kart.Shared.Messaging.csproj" />
     <ProjectReference Include="..\..\..\kart-shared\src\Kart.Shared.Configuration\Kart.Shared.Configuration.csproj" />
+    <ProjectReference Include="..\..\..\kart-shared\src\Kart.Shared.Observability\Kart.Shared.Observability.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -16,7 +17,15 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="8.0.1" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="8.0.0" />
+    <!--
+      Bumped from this project's own long-standing 8.0.0 pin to match the floor
+      Kart.Shared.Observability's own dependency chain requires (Serilog.Settings.Configuration
+      10.0.1 -> Microsoft.Extensions.Configuration.Binder 10.0.0 -> Configuration.Abstractions
+      >= 10.0.0) now that this project references it directly for KartFlowContext - avoids NU1605
+      (package downgrade treated as an error), same fix kart-cart-service's own Infrastructure
+      project already applied for the identical reason.
+    -->
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.0" />
     <PackageReference Include="Microsoft.Extensions.Http" Version="8.0.1" />
     <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="8.10.0" />
     <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="8.0.0" />

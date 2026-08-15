@@ -3,6 +3,7 @@ using Kart.Wishlist.Application.Common.Models;
 using Kart.Wishlist.Application.Features.ListWishlist;
 using Kart.Wishlist.Domain.Entities;
 using Kart.Wishlist.UnitTests.TestSupport;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 
 namespace Kart.Wishlist.UnitTests.Features;
@@ -20,7 +21,7 @@ public sealed class ListWishlistQueryHandlerTests
         readModel.GetByUserIdAsync(userId, Arg.Any<CancellationToken>())
             .Returns([new WishlistEntryResponse("sku-1", 100m, "active", Now)]);
 
-        var handler = new ListWishlistQueryHandler(readModel, dbContext);
+        var handler = new ListWishlistQueryHandler(readModel, dbContext, NullLogger<ListWishlistQueryHandler>.Instance);
         var result = await handler.Handle(new ListWishlistQuery(userId, false, null, 50), CancellationToken.None);
 
         Assert.True(result.IsSuccess);
@@ -39,7 +40,7 @@ public sealed class ListWishlistQueryHandlerTests
         var readModel = Substitute.For<IWishlistReadModelRepository>();
         readModel.GetByUserIdAsync(userId, Arg.Any<CancellationToken>()).Returns((IReadOnlyList<WishlistEntryResponse>?)null);
 
-        var handler = new ListWishlistQueryHandler(readModel, dbContext);
+        var handler = new ListWishlistQueryHandler(readModel, dbContext, NullLogger<ListWishlistQueryHandler>.Instance);
         var result = await handler.Handle(new ListWishlistQuery(userId, false, null, 50), CancellationToken.None);
 
         Assert.True(result.IsSuccess);
@@ -59,7 +60,7 @@ public sealed class ListWishlistQueryHandlerTests
             new WishlistEntryResponse("sku-stale", 50m, "stale", Now),
         ]);
 
-        var handler = new ListWishlistQueryHandler(readModel, dbContext);
+        var handler = new ListWishlistQueryHandler(readModel, dbContext, NullLogger<ListWishlistQueryHandler>.Instance);
 
         var defaultView = await handler.Handle(new ListWishlistQuery(userId, false, null, 50), CancellationToken.None);
         Assert.Single(defaultView.Value.Items);
@@ -82,7 +83,7 @@ public sealed class ListWishlistQueryHandlerTests
             new WishlistEntryResponse("sku-c", 3m, "active", Now),
         ]);
 
-        var handler = new ListWishlistQueryHandler(readModel, dbContext);
+        var handler = new ListWishlistQueryHandler(readModel, dbContext, NullLogger<ListWishlistQueryHandler>.Instance);
 
         var firstPage = await handler.Handle(new ListWishlistQuery(userId, false, null, 2), CancellationToken.None);
         Assert.Equal(2, firstPage.Value.Items.Count);

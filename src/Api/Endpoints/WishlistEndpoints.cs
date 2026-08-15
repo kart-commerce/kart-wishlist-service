@@ -1,9 +1,11 @@
+using Kart.Wishlist.Application.Common;
 using Kart.Wishlist.Application.Common.Models;
 using Kart.Wishlist.Application.Features.AddWishlistEntry;
 using Kart.Wishlist.Application.Features.ListWishlist;
 using Kart.Wishlist.Application.Features.RemoveWishlistEntry;
 using Kart.Shared.Domain;
 using Kart.Shared.ErrorHandling;
+using Kart.Shared.Observability;
 using MediatR;
 
 namespace Kart.Wishlist.Api.Endpoints;
@@ -46,42 +48,55 @@ public static class WishlistEndpoints
     private static async Task<IResult> ListWishlist(
         HttpContext httpContext,
         ISender sender,
+        ILogger<Program> logger,
         bool? includeStale,
         string? cursor,
         int? limit,
         CancellationToken cancellationToken)
     {
+        using var flowScope = KartFlowContext.Push(FlowNames.WishlistSavedItems);
+        logger.LogInformation("Stage {Stage}: list-wishlist request received", "ListWishlistRequestReceived");
+
         if (!TryResolveUserId(httpContext, out var userId))
         {
             return Unauthorized(httpContext);
         }
 
         var clampedLimit = Math.Clamp(limit ?? 50, 1, 100);
+        logger.LogInformation("Stage {Stage}: ListWishlistQuery dispatched for user {UserId}", "ListWishlistQueryDispatched", userId);
         var result = await sender.Send(new ListWishlistQuery(userId, includeStale ?? false, cursor, clampedLimit), cancellationToken);
         return Results.Ok(result.Value);
     }
 
     private static async Task<IResult> AddWishlistEntry(
-        HttpContext httpContext, AddWishlistEntryRequest request, ISender sender, CancellationToken cancellationToken)
+        HttpContext httpContext, AddWishlistEntryRequest request, ISender sender, ILogger<Program> logger, CancellationToken cancellationToken)
     {
+        using var flowScope = KartFlowContext.Push(FlowNames.WishlistSavedItems);
+        logger.LogInformation("Stage {Stage}: add-wishlist-entry request received for sku {Sku}", "AddWishlistEntryRequestReceived", request.Sku);
+
         if (!TryResolveUserId(httpContext, out var userId))
         {
             return Unauthorized(httpContext);
         }
 
         var command = new AddWishlistEntryCommand(userId, request.Sku, userId.ToString());
+        logger.LogInformation("Stage {Stage}: AddWishlistEntryCommand dispatched for sku {Sku}", "AddWishlistEntryCommandDispatched", request.Sku);
         var result = await sender.Send(command, cancellationToken);
         return result.IsSuccess ? Results.Created($"/v1/wishlist/{request.Sku}", result.Value) : Problem(httpContext, result.Error);
     }
 
-    private static async Task<IResult> RemoveWishlistEntry(string sku, HttpContext httpContext, ISender sender, CancellationToken cancellationToken)
+    private static async Task<IResult> RemoveWishlistEntry(string sku, HttpContext httpContext, ISender sender, ILogger<Program> logger, CancellationToken cancellationToken)
     {
+        using var flowScope = KartFlowContext.Push(FlowNames.WishlistSavedItems);
+        logger.LogInformation("Stage {Stage}: remove-wishlist-entry request received for sku {Sku}", "RemoveWishlistEntryRequestReceived", sku);
+
         if (!TryResolveUserId(httpContext, out var userId))
         {
             return Unauthorized(httpContext);
         }
 
         var command = new RemoveWishlistEntryCommand(userId, sku, userId.ToString());
+        logger.LogInformation("Stage {Stage}: RemoveWishlistEntryCommand dispatched for sku {Sku}", "RemoveWishlistEntryCommandDispatched", sku);
         await sender.Send(command, cancellationToken);
         return Results.NoContent();
     }

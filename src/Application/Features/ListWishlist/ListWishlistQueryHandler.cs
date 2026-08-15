@@ -5,6 +5,7 @@ using Kart.Wishlist.Application.Common.Models;
 using Kart.Shared.Domain;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace Kart.Wishlist.Application.Features.ListWishlist;
 
@@ -20,21 +21,26 @@ namespace Kart.Wishlist.Application.Features.ListWishlist;
 /// </summary>
 public sealed class ListWishlistQueryHandler(
     IWishlistReadModelRepository readModel,
-    IWishlistDbContext dbContext)
+    IWishlistDbContext dbContext,
+    ILogger<ListWishlistQueryHandler> logger)
     : IRequestHandler<ListWishlistQuery, Result<WishlistPageResponse>>
 {
     public async Task<Result<WishlistPageResponse>> Handle(ListWishlistQuery request, CancellationToken cancellationToken)
     {
         var entries = await readModel.GetByUserIdAsync(request.UserId, cancellationToken);
 
-        // Cold-start/projection-lag fallback: the read side hasn't caught up yet (or this user has
-        // simply never had a document projected) - PostgreSQL is always authoritative, so fall
-        // back to it directly rather than surfacing a false "empty wishlist."
-        entries ??= await dbContext.WishlistEntries
-            .Where(e => e.UserId == request.UserId)
-            .OrderBy(e => e.Sku)
-            .Select(e => new WishlistEntryResponse(e.Sku, e.ReferencePrice, e.Status.ToString().ToLower(), e.AddedAt))
-            .ToListAsync(cancellationToken);
+        if (entries is null)
+        {
+            // Cold-start/projection-lag fallback: the read side hasn't caught up yet (or this user
+            // has simply never had a document projected) - PostgreSQL is always authoritative, so
+            // fall back to it directly rather than surfacing a false "empty wishlist."
+            logger.LogInformation("Stage {Stage}: wishlist read model miss for user {UserId}, falling back to PostgreSQL", "WishlistReadModelFallbackPostgresBranch", request.UserId);
+            entries = await dbContext.WishlistEntries
+                .Where(e => e.UserId == request.UserId)
+                .OrderBy(e => e.Sku)
+                .Select(e => new WishlistEntryResponse(e.Sku, e.ReferencePrice, e.Status.ToString().ToLower(), e.AddedAt))
+                .ToListAsync(cancellationToken);
+        }
 
         var filtered = (request.IncludeStale ? entries : entries.Where(e => e.Status == "active"))
             .OrderBy(e => e.Sku)
@@ -44,6 +50,12 @@ public sealed class ListWishlistQueryHandler(
         var page = filtered.Skip(offset).Take(request.Limit).ToList();
         var nextOffset = offset + page.Count;
         var nextCursor = nextOffset < filtered.Count ? EncodeCursor(nextOffset) : null;
+
+        logger.LogInformation(
+            "Stage {Stage}: returned {ItemCount} wishlist item(s) for user {UserId}",
+            "ListWishlistCompleted",
+            page.Count,
+            request.UserId);
 
         return Result.Success(new WishlistPageResponse(page, nextCursor));
     }

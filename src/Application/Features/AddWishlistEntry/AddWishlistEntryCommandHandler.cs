@@ -7,6 +7,7 @@ using Kart.Wishlist.Domain.Outbox;
 using Kart.Shared.Domain;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace Kart.Wishlist.Application.Features.AddWishlistEntry;
 
@@ -14,7 +15,8 @@ public sealed class AddWishlistEntryCommandHandler(
     IWishlistDbContext dbContext,
     IUnitOfWork unitOfWork,
     IProductServiceClient productServiceClient,
-    IDateTimeProvider dateTimeProvider)
+    IDateTimeProvider dateTimeProvider,
+    ILogger<AddWishlistEntryCommandHandler> logger)
     : IRequestHandler<AddWishlistEntryCommand, Result<WishlistEntryResponse>>
 {
     public async Task<Result<WishlistEntryResponse>> Handle(AddWishlistEntryCommand request, CancellationToken cancellationToken)
@@ -22,6 +24,7 @@ public sealed class AddWishlistEntryCommandHandler(
         var product = await productServiceClient.GetProductAsync(request.Sku, cancellationToken);
         if (product is null || !product.IsActive)
         {
+            logger.LogWarning("Stage {Stage}: add-to-wishlist rejected, sku {Sku} does not resolve to an active product", "SkuNotFoundValidationFailed", request.Sku);
             return Result.Failure<WishlistEntryResponse>(
                 Error.Custom("sku_not_found", $"'{request.Sku}' does not resolve to an active product."));
         }
@@ -36,6 +39,7 @@ public sealed class AddWishlistEntryCommandHandler(
             if (alreadyWishlisted)
             {
                 await unitOfWork.RollbackTransactionAsync(cancellationToken);
+                logger.LogWarning("Stage {Stage}: add-to-wishlist no-op, sku {Sku} is already on user {UserId}'s wishlist", "SkuAlreadyWishlistedNoOp", request.Sku, request.UserId);
                 return Result.Failure<WishlistEntryResponse>(
                     Error.Custom("sku_already_wishlisted", $"'{request.Sku}' is already on this wishlist."));
             }
@@ -48,22 +52,39 @@ public sealed class AddWishlistEntryCommandHandler(
             if (activeCount >= WishlistEntry.MaxActiveEntriesPerUser)
             {
                 await unitOfWork.RollbackTransactionAsync(cancellationToken);
+                logger.LogWarning("Stage {Stage}: add-to-wishlist rejected, user {UserId} is at the {Limit}-entry limit", "WishlistSizeLimitExceededValidationFailed", request.UserId, WishlistEntry.MaxActiveEntriesPerUser);
                 return Result.Failure<WishlistEntryResponse>(
                     Error.Custom("wishlist_size_limit_exceeded", $"Wishlist is already at its {WishlistEntry.MaxActiveEntriesPerUser}-entry limit."));
             }
 
             var entry = WishlistEntry.Create(request.UserId, request.Sku, product.Price, now, request.ActingPrincipalId);
             dbContext.WishlistEntries.Add(entry);
-            dbContext.WishlistOutboxEvents.Add(WishlistOutboxEvent.CreateMutationMarker(request.UserId, request.Sku, now, request.ActingPrincipalId));
+            var mutationMarker = WishlistOutboxEvent.CreateMutationMarker(request.UserId, request.Sku, now, request.ActingPrincipalId);
+            dbContext.WishlistOutboxEvents.Add(mutationMarker);
 
             await unitOfWork.SaveChangesAsync(cancellationToken);
             await unitOfWork.CommitTransactionAsync(cancellationToken);
+
+            logger.LogInformation(
+                "Stage {Stage}: wishlist entry {EntryId} for sku {Sku} persisted, outbox event {OutboxId} ({EventType}) enqueued",
+                "WishlistEntryPersistedOutboxEventEnqueued",
+                entry.EntryId,
+                entry.Sku,
+                mutationMarker.OutboxId,
+                mutationMarker.EventType);
+
+            logger.LogInformation(
+                "Stage {Stage}: sku {Sku} added to user {UserId}'s wishlist",
+                "AddWishlistEntryCompleted",
+                entry.Sku,
+                request.UserId);
 
             return Result.Success(WishlistEntryMapper.ToResponse(entry));
         }
         catch (DuplicateKeyException)
         {
             await unitOfWork.RollbackTransactionAsync(cancellationToken);
+            logger.LogWarning("Stage {Stage}: add-to-wishlist no-op, sku {Sku} lost the uq_wishlist_entries race for user {UserId}", "SkuAlreadyWishlistedNoOp", request.Sku, request.UserId);
             return Result.Failure<WishlistEntryResponse>(
                 Error.Custom("sku_already_wishlisted", $"'{request.Sku}' is already on this wishlist."));
         }

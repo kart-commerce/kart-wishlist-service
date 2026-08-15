@@ -26,15 +26,19 @@ public sealed class EvaluatePriceDropAlertCommandHandler(
 
         if (candidates.Count == 0)
         {
+            logger.LogInformation("Stage {Stage}: no active wishlist entries hold sku {Sku}, price-drop evaluation is a no-op", "PriceDropEvaluationNoOpNoCandidates", request.Sku);
             return;
         }
 
         var dedupRowsToAdd = new List<WishlistAlertDedup>();
+        var notWorthyOrCooldownCount = 0;
+        var alreadyAlertedCount = 0;
 
         foreach (var entry in candidates)
         {
             if (!entry.IsAlertWorthy(request.NewPrice) || entry.IsCooldownActive(now))
             {
+                notWorthyOrCooldownCount++;
                 continue;
             }
 
@@ -46,12 +50,22 @@ public sealed class EvaluatePriceDropAlertCommandHandler(
                 cancellationToken);
             if (alreadyAlerted)
             {
+                alreadyAlertedCount++;
                 continue;
             }
 
             dedupRowsToAdd.Add(WishlistAlertDedup.Create(entry.UserId, entry.Sku, request.NewPrice, now));
             await digestAccumulator.EnqueueAsync(entry.UserId, entry.Sku, request.OldPrice, request.NewPrice, now, cancellationToken);
         }
+
+        logger.LogInformation(
+            "Stage {Stage}: sku {Sku} at {NewPrice} — {QueuedCount} candidate(s) queued to digest, {SkippedCount} not-worthy/cooldown, {DedupNoOpCount} already-alerted no-op",
+            "PriceDropAlertDecisionBranch",
+            request.Sku,
+            request.NewPrice,
+            dedupRowsToAdd.Count,
+            notWorthyOrCooldownCount,
+            alreadyAlertedCount);
 
         if (dedupRowsToAdd.Count == 0)
         {
@@ -63,6 +77,13 @@ public sealed class EvaluatePriceDropAlertCommandHandler(
         try
         {
             await dbContext.SaveChangesAsync(cancellationToken);
+
+            logger.LogInformation(
+                "Stage {Stage}: {Count} wishlist-alert-dedup row(s) persisted for sku {Sku} at {NewPrice}",
+                "WishlistAlertDedupPersisted",
+                dedupRowsToAdd.Count,
+                request.Sku,
+                request.NewPrice);
         }
         catch (DbUpdateException ex)
         {
@@ -71,7 +92,14 @@ public sealed class EvaluatePriceDropAlertCommandHandler(
             // redelivery this loses to will simply be retried by the consumer's own retry-ladder;
             // no data was lost, this batch's remaining qualifying entries just wait for the next
             // qualifying ProductPriceChanged.
-            logger.LogWarning(ex, "Dedup insert batch for {Sku} at {NewPrice} hit a concurrent duplicate; will retry on next qualifying delivery.", request.Sku, request.NewPrice);
+            logger.LogWarning(ex, "Stage {Stage}: dedup insert batch for {Sku} at {NewPrice} hit a concurrent duplicate; will retry on next qualifying delivery.", "WishlistAlertDedupConcurrentDuplicate", request.Sku, request.NewPrice);
+            return;
         }
+
+        logger.LogInformation(
+            "Stage {Stage}: price-drop evaluation for sku {Sku} completed, {Count} entry/entries queued for digest flush",
+            "EvaluatePriceDropAlertCompleted",
+            request.Sku,
+            dedupRowsToAdd.Count);
     }
 }
