@@ -77,13 +77,6 @@ public sealed class EvaluatePriceDropAlertCommandHandler(
         try
         {
             await dbContext.SaveChangesAsync(cancellationToken);
-
-            logger.LogInformation(
-                "Stage {Stage}: {Count} wishlist-alert-dedup row(s) persisted for sku {Sku} at {NewPrice}",
-                "WishlistAlertDedupPersisted",
-                dedupRowsToAdd.Count,
-                request.Sku,
-                request.NewPrice);
         }
         catch (DbUpdateException ex)
         {
@@ -97,7 +90,7 @@ public sealed class EvaluatePriceDropAlertCommandHandler(
         }
 
         logger.LogInformation(
-            "Stage {Stage}: price-drop evaluation for sku {Sku} completed, {Count} entry/entries queued for digest flush",
+            "Stage {Stage}: price-drop evaluation for sku {Sku} completed, {Count} wishlist-alert-dedup row(s) persisted",
             "EvaluatePriceDropAlertCompleted",
             request.Sku,
             dedupRowsToAdd.Count);

@@ -42,16 +42,10 @@ public sealed class MarkEntriesStaleOnProductDiscontinuedCommandHandler(
         await dbContext.SaveChangesAsync(cancellationToken);
 
         logger.LogInformation(
-            "Stage {Stage}: {Count} wishlist entry/entries for discontinued sku {Sku} persisted stale, outbox events {OutboxIds} enqueued",
-            "WishlistEntriesMarkedStalePersistedOutboxEnqueued",
-            entries.Count,
-            request.Sku,
-            string.Join(",", outboxIds));
-
-        logger.LogInformation(
-            "Stage {Stage}: sku {Sku} discontinuation processed, {Count} wishlist entry/entries marked stale",
+            "Stage {Stage}: sku {Sku} discontinuation processed, {Count} wishlist entry/entries marked stale, outbox events {OutboxIds} enqueued",
             "MarkEntriesStaleOnProductDiscontinuedCompleted",
             request.Sku,
-            entries.Count);
+            entries.Count,
+            string.Join(",", outboxIds));
     }
 }

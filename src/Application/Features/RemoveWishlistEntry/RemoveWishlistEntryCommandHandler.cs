@@ -33,18 +33,13 @@ public sealed class RemoveWishlistEntryCommandHandler(
         await dbContext.SaveChangesAsync(cancellationToken);
 
         logger.LogInformation(
-            "Stage {Stage}: wishlist entry {EntryId} for sku {Sku} removed, outbox event {OutboxId} ({EventType}) enqueued",
-            "WishlistEntryRemovedOutboxEventEnqueued",
-            entry.EntryId,
-            entry.Sku,
-            mutationMarker.OutboxId,
-            mutationMarker.EventType);
-
-        logger.LogInformation(
-            "Stage {Stage}: sku {Sku} removed from user {UserId}'s wishlist",
+            "Stage {Stage}: sku {Sku} removed from user {UserId}'s wishlist, entry {EntryId} removed, outbox event {OutboxId} ({EventType}) enqueued",
             "RemoveWishlistEntryCompleted",
             entry.Sku,
-            request.UserId);
+            request.UserId,
+            entry.EntryId,
+            mutationMarker.OutboxId,
+            mutationMarker.EventType);
 
         return Result.Success();
     }

@@ -108,20 +108,14 @@ public sealed class FlushAlertDigestCommandHandler(
             {
                 dbContext.WishlistOutboxEvents.AddRange(outboxRowsToAdd);
                 await dbContext.SaveChangesAsync(cancellationToken);
-
-                logger.LogInformation(
-                    "Stage {Stage}: {Count} WishlistPriceAlertTriggered outbox event(s) enqueued for user {UserId}, outbox ids {OutboxIds}",
-                    "WishlistPriceAlertOutboxEventEnqueued",
-                    outboxRowsToAdd.Count,
-                    request.UserId,
-                    string.Join(",", outboxRowsToAdd.Select(e => e.OutboxId)));
             }
 
             logger.LogInformation(
-                "Stage {Stage}: digest flush for user {UserId} completed, {Count} alert(s) triggered",
+                "Stage {Stage}: digest flush for user {UserId} completed, {Count} alert(s) triggered, outbox ids {OutboxIds}",
                 "FlushAlertDigestCompleted",
                 request.UserId,
-                outboxRowsToAdd.Count);
+                outboxRowsToAdd.Count,
+                outboxRowsToAdd.Count > 0 ? string.Join(",", outboxRowsToAdd.Select(e => e.OutboxId)) : "none");
         }
         finally
         {

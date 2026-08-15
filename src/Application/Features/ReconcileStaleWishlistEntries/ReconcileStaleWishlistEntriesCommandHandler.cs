@@ -123,15 +123,10 @@ public sealed class ReconcileStaleWishlistEntriesCommandHandler(
         await dbContext.SaveChangesAsync(cancellationToken);
 
         logger.LogInformation(
-            "Stage {Stage}: reconciliation cycle marked {EntryCount} entries stale across {SkuCount} discontinued/missing SKU(s).",
-            "WishlistEntriesMarkedStalePersistedOutboxEnqueued",
+            "Stage {Stage}: reconciliation cycle completed, {EntryCount} entries marked stale across {SkuCount} discontinued/missing SKU(s)",
+            "ReconciliationCycleCompleted",
             affectedEntries.Count,
             staleSkus.Count);
-
-        logger.LogInformation(
-            "Stage {Stage}: reconciliation cycle completed, {EntryCount} entries marked stale",
-            "ReconciliationCycleCompleted",
-            affectedEntries.Count);
 
         return affectedEntries.Count;
     }

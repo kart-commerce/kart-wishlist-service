@@ -96,7 +96,6 @@ public sealed class ProductEventsConsumerHostedService(
                         payload.Sku,
                         payload.OldPrice,
                         payload.NewPrice);
-                    logger.LogInformation("Stage {Stage}: EvaluatePriceDropAlertCommand dispatched for sku {Sku}", "EvaluatePriceDropAlertCommandDispatched", payload.Sku);
                     await sender.Send(new EvaluatePriceDropAlertCommand(payload.Sku, payload.OldPrice, payload.NewPrice, payload.OccurredAt), cancellationToken);
                     break;
                 }
@@ -110,7 +109,6 @@ public sealed class ProductEventsConsumerHostedService(
                         "ProductDiscontinuedConsumed",
                         QueueName,
                         payload.Sku);
-                    logger.LogInformation("Stage {Stage}: MarkEntriesStaleOnProductDiscontinuedCommand dispatched for sku {Sku}", "MarkEntriesStaleOnProductDiscontinuedCommandDispatched", payload.Sku);
                     await sender.Send(new MarkEntriesStaleOnProductDiscontinuedCommand(payload.Sku, payload.DiscontinuedAt), cancellationToken);
                     break;
                 }

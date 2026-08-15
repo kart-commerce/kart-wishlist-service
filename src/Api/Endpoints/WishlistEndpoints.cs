@@ -63,7 +63,6 @@ public static class WishlistEndpoints
         }
 
         var clampedLimit = Math.Clamp(limit ?? 50, 1, 100);
-        logger.LogInformation("Stage {Stage}: ListWishlistQuery dispatched for user {UserId}", "ListWishlistQueryDispatched", userId);
         var result = await sender.Send(new ListWishlistQuery(userId, includeStale ?? false, cursor, clampedLimit), cancellationToken);
         return Results.Ok(result.Value);
     }
@@ -80,7 +79,6 @@ public static class WishlistEndpoints
         }
 
         var command = new AddWishlistEntryCommand(userId, request.Sku, userId.ToString());
-        logger.LogInformation("Stage {Stage}: AddWishlistEntryCommand dispatched for sku {Sku}", "AddWishlistEntryCommandDispatched", request.Sku);
         var result = await sender.Send(command, cancellationToken);
         return result.IsSuccess ? Results.Created($"/v1/wishlist/{request.Sku}", result.Value) : Problem(httpContext, result.Error);
     }
@@ -96,7 +94,6 @@ public static class WishlistEndpoints
         }
 
         var command = new RemoveWishlistEntryCommand(userId, sku, userId.ToString());
-        logger.LogInformation("Stage {Stage}: RemoveWishlistEntryCommand dispatched for sku {Sku}", "RemoveWishlistEntryCommandDispatched", sku);
         await sender.Send(command, cancellationToken);
         return Results.NoContent();
     }

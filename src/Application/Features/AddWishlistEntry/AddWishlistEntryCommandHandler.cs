@@ -66,18 +66,13 @@ public sealed class AddWishlistEntryCommandHandler(
             await unitOfWork.CommitTransactionAsync(cancellationToken);
 
             logger.LogInformation(
-                "Stage {Stage}: wishlist entry {EntryId} for sku {Sku} persisted, outbox event {OutboxId} ({EventType}) enqueued",
-                "WishlistEntryPersistedOutboxEventEnqueued",
-                entry.EntryId,
-                entry.Sku,
-                mutationMarker.OutboxId,
-                mutationMarker.EventType);
-
-            logger.LogInformation(
-                "Stage {Stage}: sku {Sku} added to user {UserId}'s wishlist",
+                "Stage {Stage}: sku {Sku} added to user {UserId}'s wishlist, entry {EntryId} persisted, outbox event {OutboxId} ({EventType}) enqueued",
                 "AddWishlistEntryCompleted",
                 entry.Sku,
-                request.UserId);
+                request.UserId,
+                entry.EntryId,
+                mutationMarker.OutboxId,
+                mutationMarker.EventType);
 
             return Result.Success(WishlistEntryMapper.ToResponse(entry));
         }
