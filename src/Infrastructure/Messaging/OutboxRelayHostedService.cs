@@ -1,7 +1,9 @@
 using System.Text;
+using Kart.Wishlist.Application.Common;
 using Kart.Wishlist.Domain.Outbox;
 using Kart.Wishlist.Infrastructure.Persistence;
 using Kart.Shared.Messaging;
+using Kart.Shared.Observability;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -79,18 +81,31 @@ public sealed class OutboxRelayHostedService(
 
         foreach (var outboxEvent in batch)
         {
+            using var flowScope = KartFlowContext.Push(FlowNames.WishlistSavedItems);
+
+            var exchange = manifest.ExchangeFor(outboxEvent.EventType);
+            var routingKey = manifest.RoutingKeyFor(outboxEvent.EventType);
+
             var properties = channel.CreateBasicProperties();
             properties.Persistent = true;
             properties.MessageId = outboxEvent.OutboxId.ToString();
             properties.ContentType = "application/json";
 
             channel.BasicPublish(
-                exchange: manifest.ExchangeFor(outboxEvent.EventType),
-                routingKey: manifest.RoutingKeyFor(outboxEvent.EventType),
+                exchange: exchange,
+                routingKey: routingKey,
                 basicProperties: properties,
                 body: Encoding.UTF8.GetBytes(outboxEvent.Payload));
 
             outboxEvent.MarkPublished(publishedAt, "system:wishlist-outbox-poller");
+
+            logger.LogInformation(
+                "Stage {Stage}: outbox event {OutboxId} of type {EventType} published to {Exchange}/{RoutingKey}",
+                "OutboxEventPublished",
+                outboxEvent.OutboxId,
+                outboxEvent.EventType,
+                exchange,
+                routingKey);
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);

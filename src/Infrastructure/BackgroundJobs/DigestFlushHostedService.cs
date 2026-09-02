@@ -1,5 +1,7 @@
+using Kart.Wishlist.Application.Common;
 using Kart.Wishlist.Application.Common.Interfaces;
 using Kart.Wishlist.Application.Features.FlushAlertDigest;
+using Kart.Shared.Observability;
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -55,6 +57,9 @@ public sealed class DigestFlushHostedService(
             {
                 continue;
             }
+
+            using var flowScope = KartFlowContext.Push(FlowNames.WishlistSavedItems);
+            logger.LogInformation("Stage {Stage}: FlushAlertDigestCommand dispatched for user {UserId}", "FlushAlertDigestCommandDispatched", userId);
 
             using var scope = scopeFactory.CreateScope();
             var sender = scope.ServiceProvider.GetRequiredService<ISender>();

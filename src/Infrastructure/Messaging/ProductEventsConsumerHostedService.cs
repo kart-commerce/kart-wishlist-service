@@ -1,7 +1,9 @@
 using System.Text.Json;
+using Kart.Wishlist.Application.Common;
 using Kart.Wishlist.Application.Features.EvaluatePriceDropAlert;
 using Kart.Wishlist.Application.Features.MarkEntriesStaleOnProductDiscontinued;
 using Kart.Shared.Messaging;
+using Kart.Shared.Observability;
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -73,6 +75,7 @@ public sealed class ProductEventsConsumerHostedService(
 
     private async Task OnMessageAsync(IModel channel, QueueDefinition queue, BasicDeliverEventArgs delivery, CancellationToken cancellationToken)
     {
+        using var flowScope = KartFlowContext.Push(FlowNames.WishlistSavedItems);
         try
         {
             var routingKey = RetryLadderDispatcher.GetEffectiveRoutingKey(delivery);
@@ -86,6 +89,13 @@ public sealed class ProductEventsConsumerHostedService(
                 {
                     var payload = JsonSerializer.Deserialize<ProductPriceChangedEventPayload>(delivery.Body.Span, SerializerOptions)
                         ?? throw new InvalidOperationException("ProductPriceChanged payload deserialized to null.");
+                    logger.LogInformation(
+                        "Stage {Stage}: ProductPriceChanged consumed from {Queue}, sku {Sku} {OldPrice}->{NewPrice}",
+                        "ProductPriceChangedConsumed",
+                        QueueName,
+                        payload.Sku,
+                        payload.OldPrice,
+                        payload.NewPrice);
                     await sender.Send(new EvaluatePriceDropAlertCommand(payload.Sku, payload.OldPrice, payload.NewPrice, payload.OccurredAt), cancellationToken);
                     break;
                 }
@@ -94,11 +104,17 @@ public sealed class ProductEventsConsumerHostedService(
                 {
                     var payload = JsonSerializer.Deserialize<ProductDiscontinuedEventPayload>(delivery.Body.Span, SerializerOptions)
                         ?? throw new InvalidOperationException("ProductDiscontinued payload deserialized to null.");
+                    logger.LogInformation(
+                        "Stage {Stage}: ProductDiscontinued consumed from {Queue}, sku {Sku}",
+                        "ProductDiscontinuedConsumed",
+                        QueueName,
+                        payload.Sku);
                     await sender.Send(new MarkEntriesStaleOnProductDiscontinuedCommand(payload.Sku, payload.DiscontinuedAt), cancellationToken);
                     break;
                 }
 
                 default:
+                    logger.LogWarning("Stage {Stage}: unrecognized routing key {RoutingKey} on {Queue}", "ProductEventUnrecognizedRoutingKey", routingKey, QueueName);
                     throw new InvalidOperationException($"Unrecognized routing key '{routingKey}' on {QueueName}.");
             }
 

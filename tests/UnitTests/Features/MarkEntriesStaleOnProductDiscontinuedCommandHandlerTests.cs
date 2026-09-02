@@ -3,6 +3,7 @@ using Kart.Wishlist.Application.Features.MarkEntriesStaleOnProductDiscontinued;
 using Kart.Wishlist.Domain.Entities;
 using Kart.Wishlist.Domain.Enums;
 using Kart.Wishlist.UnitTests.TestSupport;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 
 namespace Kart.Wishlist.UnitTests.Features;
@@ -24,7 +25,7 @@ public sealed class MarkEntriesStaleOnProductDiscontinuedCommandHandlerTests
 
         var dateTimeProvider = Substitute.For<IDateTimeProvider>();
         dateTimeProvider.UtcNow.Returns(Now.AddHours(1));
-        var handler = new MarkEntriesStaleOnProductDiscontinuedCommandHandler(dbContext, dateTimeProvider);
+        var handler = new MarkEntriesStaleOnProductDiscontinuedCommandHandler(dbContext, dateTimeProvider, NullLogger<MarkEntriesStaleOnProductDiscontinuedCommandHandler>.Instance);
 
         await handler.Handle(new MarkEntriesStaleOnProductDiscontinuedCommand("sku-1", Now), CancellationToken.None);
 
@@ -37,7 +38,7 @@ public sealed class MarkEntriesStaleOnProductDiscontinuedCommandHandlerTests
     public async Task Is_a_no_op_when_no_entry_holds_the_sku()
     {
         using var dbContext = InMemoryWishlistDbContextFactory.Create();
-        var handler = new MarkEntriesStaleOnProductDiscontinuedCommandHandler(dbContext, Substitute.For<IDateTimeProvider>());
+        var handler = new MarkEntriesStaleOnProductDiscontinuedCommandHandler(dbContext, Substitute.For<IDateTimeProvider>(), NullLogger<MarkEntriesStaleOnProductDiscontinuedCommandHandler>.Instance);
 
         await handler.Handle(new MarkEntriesStaleOnProductDiscontinuedCommand("sku-none", Now), CancellationToken.None);
 

@@ -24,6 +24,7 @@ public sealed class FlushAlertDigestCommandHandler(
         var lockAcquired = await digestAccumulator.TryAcquireFlushLockAsync(request.UserId, cancellationToken);
         if (!lockAcquired)
         {
+            logger.LogInformation("Stage {Stage}: digest flush no-op, another flush already holds the lock for user {UserId}", "FlushAlertDigestNoOpLockHeld", request.UserId);
             return;
         }
 
@@ -32,11 +33,13 @@ public sealed class FlushAlertDigestCommandHandler(
             var pendingItems = await digestAccumulator.DequeueAllAsync(request.UserId, cancellationToken);
             if (pendingItems.Count == 0)
             {
+                logger.LogInformation("Stage {Stage}: digest flush no-op, no pending items queued for user {UserId}", "FlushAlertDigestNoOpEmptyQueue", request.UserId);
                 return;
             }
 
             var now = dateTimeProvider.UtcNow;
             var outboxRowsToAdd = new List<WishlistOutboxEvent>();
+            var suppressedCount = 0;
 
             foreach (var item in pendingItems)
             {
@@ -47,6 +50,7 @@ public sealed class FlushAlertDigestCommandHandler(
                 // nothing left to alert on.
                 if (entry is null || entry.Status != Domain.Enums.WishlistEntryStatus.Active)
                 {
+                    suppressedCount++;
                     continue;
                 }
 
@@ -65,18 +69,21 @@ public sealed class FlushAlertDigestCommandHandler(
                 }
                 catch (Exception ex)
                 {
-                    logger.LogWarning(ex, "Digest-send-time price re-check failed for {Sku}; suppressing from this cycle.", item.Sku);
+                    suppressedCount++;
+                    logger.LogWarning(ex, "Stage {Stage}: digest-send-time price re-check failed for {Sku}; suppressing from this cycle.", "DigestPriceRecheckFailedSuppressed", item.Sku);
                     continue;
                 }
 
                 if (currentProduct is null || !currentProduct.IsActive)
                 {
+                    suppressedCount++;
                     continue;
                 }
 
                 if (currentProduct.Price >= baseline)
                 {
                     // Rebounded to/above the baseline it was triggered on — no drop left to report.
+                    suppressedCount++;
                     continue;
                 }
 
@@ -89,11 +96,26 @@ public sealed class FlushAlertDigestCommandHandler(
                 outboxRowsToAdd.Add(WishlistOutboxEvent.CreateAlertTriggered(request.UserId, item.Sku, payload, now));
             }
 
+            logger.LogInformation(
+                "Stage {Stage}: digest flush for user {UserId} — {QueuedCount} of {PendingCount} pending item(s) qualify, {SuppressedCount} suppressed",
+                "FlushAlertDigestDecisionBranch",
+                request.UserId,
+                outboxRowsToAdd.Count,
+                pendingItems.Count,
+                suppressedCount);
+
             if (outboxRowsToAdd.Count > 0)
             {
                 dbContext.WishlistOutboxEvents.AddRange(outboxRowsToAdd);
                 await dbContext.SaveChangesAsync(cancellationToken);
             }
+
+            logger.LogInformation(
+                "Stage {Stage}: digest flush for user {UserId} completed, {Count} alert(s) triggered, outbox ids {OutboxIds}",
+                "FlushAlertDigestCompleted",
+                request.UserId,
+                outboxRowsToAdd.Count,
+                outboxRowsToAdd.Count > 0 ? string.Join(",", outboxRowsToAdd.Select(e => e.OutboxId)) : "none");
         }
         finally
         {

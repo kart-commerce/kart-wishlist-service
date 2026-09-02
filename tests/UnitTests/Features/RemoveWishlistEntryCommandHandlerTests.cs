@@ -2,6 +2,7 @@ using Kart.Wishlist.Application.Common.Interfaces;
 using Kart.Wishlist.Application.Features.RemoveWishlistEntry;
 using Kart.Wishlist.Domain.Entities;
 using Kart.Wishlist.UnitTests.TestSupport;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 
 namespace Kart.Wishlist.UnitTests.Features;
@@ -20,7 +21,7 @@ public sealed class RemoveWishlistEntryCommandHandlerTests
 
         var dateTimeProvider = Substitute.For<IDateTimeProvider>();
         dateTimeProvider.UtcNow.Returns(Now);
-        var handler = new RemoveWishlistEntryCommandHandler(dbContext, dateTimeProvider);
+        var handler = new RemoveWishlistEntryCommandHandler(dbContext, dateTimeProvider, NullLogger<RemoveWishlistEntryCommandHandler>.Instance);
 
         var result = await handler.Handle(new RemoveWishlistEntryCommand(userId, "sku-1", userId.ToString()), CancellationToken.None);
 
@@ -33,7 +34,7 @@ public sealed class RemoveWishlistEntryCommandHandlerTests
     public async Task Removing_an_absent_sku_is_a_no_op_success_idempotent_delete()
     {
         using var dbContext = InMemoryWishlistDbContextFactory.Create();
-        var handler = new RemoveWishlistEntryCommandHandler(dbContext, Substitute.For<IDateTimeProvider>());
+        var handler = new RemoveWishlistEntryCommandHandler(dbContext, Substitute.For<IDateTimeProvider>(), NullLogger<RemoveWishlistEntryCommandHandler>.Instance);
         var userId = Guid.NewGuid();
 
         var result = await handler.Handle(new RemoveWishlistEntryCommand(userId, "sku-never-existed", userId.ToString()), CancellationToken.None);

@@ -3,6 +3,7 @@ using Kart.Wishlist.Application.Common.Models;
 using Kart.Wishlist.Application.Features.AddWishlistEntry;
 using Kart.Wishlist.Domain.Entities;
 using Kart.Wishlist.UnitTests.TestSupport;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 
 namespace Kart.Wishlist.UnitTests.Features;
@@ -20,7 +21,7 @@ public sealed class AddWishlistEntryCommandHandlerTests
         var dateTimeProvider = Substitute.For<IDateTimeProvider>();
         dateTimeProvider.UtcNow.Returns(Now);
 
-        var handler = new AddWishlistEntryCommandHandler(dbContext, new FakeUnitOfWork(dbContext), productClient, dateTimeProvider);
+        var handler = new AddWishlistEntryCommandHandler(dbContext, new FakeUnitOfWork(dbContext), productClient, dateTimeProvider, NullLogger<AddWishlistEntryCommandHandler>.Instance);
         var userId = Guid.NewGuid();
 
         var result = await handler.Handle(new AddWishlistEntryCommand(userId, "sku-1", userId.ToString()), CancellationToken.None);
@@ -40,7 +41,7 @@ public sealed class AddWishlistEntryCommandHandlerTests
         var productClient = Substitute.For<IProductServiceClient>();
         productClient.GetProductAsync("sku-missing", Arg.Any<CancellationToken>()).Returns((ProductInfo?)null);
 
-        var handler = new AddWishlistEntryCommandHandler(dbContext, new FakeUnitOfWork(dbContext), productClient, Substitute.For<IDateTimeProvider>());
+        var handler = new AddWishlistEntryCommandHandler(dbContext, new FakeUnitOfWork(dbContext), productClient, Substitute.For<IDateTimeProvider>(), NullLogger<AddWishlistEntryCommandHandler>.Instance);
         var userId = Guid.NewGuid();
 
         var result = await handler.Handle(new AddWishlistEntryCommand(userId, "sku-missing", userId.ToString()), CancellationToken.None);
@@ -61,7 +62,7 @@ public sealed class AddWishlistEntryCommandHandlerTests
         var productClient = Substitute.For<IProductServiceClient>();
         productClient.GetProductAsync("sku-1", Arg.Any<CancellationToken>()).Returns(new ProductInfo("sku-1", 90m, true));
 
-        var handler = new AddWishlistEntryCommandHandler(dbContext, new FakeUnitOfWork(dbContext), productClient, Substitute.For<IDateTimeProvider>());
+        var handler = new AddWishlistEntryCommandHandler(dbContext, new FakeUnitOfWork(dbContext), productClient, Substitute.For<IDateTimeProvider>(), NullLogger<AddWishlistEntryCommandHandler>.Instance);
 
         var result = await handler.Handle(new AddWishlistEntryCommand(userId, "sku-1", userId.ToString()), CancellationToken.None);
 
@@ -84,7 +85,7 @@ public sealed class AddWishlistEntryCommandHandlerTests
         var productClient = Substitute.For<IProductServiceClient>();
         productClient.GetProductAsync("sku-new", Arg.Any<CancellationToken>()).Returns(new ProductInfo("sku-new", 50m, true));
 
-        var handler = new AddWishlistEntryCommandHandler(dbContext, new FakeUnitOfWork(dbContext), productClient, Substitute.For<IDateTimeProvider>());
+        var handler = new AddWishlistEntryCommandHandler(dbContext, new FakeUnitOfWork(dbContext), productClient, Substitute.For<IDateTimeProvider>(), NullLogger<AddWishlistEntryCommandHandler>.Instance);
 
         var result = await handler.Handle(new AddWishlistEntryCommand(userId, "sku-new", userId.ToString()), CancellationToken.None);
 

@@ -1,4 +1,6 @@
+using Kart.Wishlist.Application.Common;
 using Kart.Wishlist.Application.Features.ReconcileStaleWishlistEntries;
+using Kart.Shared.Observability;
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -19,6 +21,9 @@ public sealed class ReconciliationHostedService(
         {
             try
             {
+                using var flowScope = KartFlowContext.Push(FlowNames.WishlistSavedItems);
+                logger.LogInformation("Stage {Stage}: ReconcileStaleWishlistEntriesCommand dispatched", "ReconcileStaleWishlistEntriesCommandDispatched");
+
                 using var scope = scopeFactory.CreateScope();
                 var sender = scope.ServiceProvider.GetRequiredService<ISender>();
                 await sender.Send(new ReconcileStaleWishlistEntriesCommand(), stoppingToken);
